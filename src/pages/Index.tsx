@@ -264,6 +264,14 @@ const Index = () => {
                   className="bg-card border border-border text-sm rounded-full pl-10 pr-4 py-2 w-64 focus:outline-none focus:ring-2 focus:ring-ring transition-all text-foreground"
                 />
               </div>
+              {isAdmin && (
+                <button
+                  onClick={() => window.location.href = '/admin'}
+                  className="text-xs font-medium px-3 py-1 rounded-full bg-primary/20 border border-primary text-primary hover:bg-primary/30 transition-colors"
+                >
+                  Admin Panel
+                </button>
+              )}
               <button 
                 onClick={() => {
                   if (isAdmin) {
