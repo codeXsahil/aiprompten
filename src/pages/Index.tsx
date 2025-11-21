@@ -8,12 +8,10 @@ import {
   query, orderBy, onSnapshot, doc, updateDoc, increment
 } from "firebase/firestore";
 import { 
-  signInAnonymously, onAuthStateChanged, 
-  signInWithEmailAndPassword, signOut 
+  signInAnonymously, onAuthStateChanged, signOut 
 } from "firebase/auth";
 import { db, auth, isConfigured } from '@/lib/firebase';
 import { uploadToCloudinary } from '@/lib/cloudinary';
-import { LoginModal } from '@/components/LoginModal';
 import { Notification } from '@/components/Notification';
 import { UploadModal, UploadFormData } from '@/components/UploadModal';
 import { ArtworkCard } from '@/components/ArtworkCard';
@@ -43,7 +41,7 @@ const MOCK_DATA = [
 const Index = () => {
   const [artworks, setArtworks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedArt, setSelectedArt] = useState<any>(null);
@@ -106,13 +104,6 @@ const Index = () => {
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
-  };
-
-  const handleAdminLogin = async (email: string, password: string) => {
-    if (!auth) return;
-    await signOut(auth);
-    await signInWithEmailAndPassword(auth, email, password);
-    showNotification("Welcome back, Admin!");
   };
 
   const handleLogout = async () => {
@@ -217,12 +208,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <LoginModal 
-        isOpen={isLoginOpen} 
-        onClose={() => setIsLoginOpen(false)} 
-        onLogin={handleAdminLogin} 
-      />
-
       <UploadModal
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
@@ -265,29 +250,21 @@ const Index = () => {
                 />
               </div>
               {isAdmin && (
-                <button
-                  onClick={() => window.location.href = '/admin'}
-                  className="text-xs font-medium px-3 py-1 rounded-full bg-primary/20 border border-primary text-primary hover:bg-primary/30 transition-colors"
-                >
-                  Admin Panel
-                </button>
+                <>
+                  <button
+                    onClick={() => window.location.href = '/admin'}
+                    className="text-xs font-medium px-3 py-1 rounded-full bg-primary/20 border border-primary text-primary hover:bg-primary/30 transition-colors"
+                  >
+                    Admin Panel
+                  </button>
+                  <button 
+                    onClick={handleLogout}
+                    className="text-xs font-medium px-3 py-1 rounded-full border bg-primary/20 border-primary text-primary transition-colors"
+                  >
+                    Log Out
+                  </button>
+                </>
               )}
-              <button 
-                onClick={() => {
-                  if (isAdmin) {
-                    handleLogout();
-                  } else {
-                    setIsLoginOpen(true);
-                  }
-                }}
-                className={`text-xs font-medium px-3 py-1 rounded-full border transition-colors ${
-                  isAdmin 
-                    ? 'bg-primary/20 border-primary text-primary' 
-                    : 'border-border text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {isAdmin ? 'Log Out' : 'Admin Login'}
-              </button>
             </div>
           </div>
         </div>

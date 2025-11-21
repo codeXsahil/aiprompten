@@ -8,9 +8,10 @@ import {
   collection, query, orderBy, onSnapshot, 
   doc, deleteDoc, getDocs 
 } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { db, auth } from '@/lib/firebase';
 import { Notification } from '@/components/Notification';
+import { LoginModal } from '@/components/LoginModal';
 import { UploadModal, UploadFormData } from '@/components/UploadModal';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { addDoc, serverTimestamp } from 'firebase/firestore';
@@ -21,6 +22,7 @@ const Admin = () => {
   const [artworks, setArtworks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [stats, setStats] = useState({
     totalArtworks: 0,
@@ -35,7 +37,8 @@ const Admin = () => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser || currentUser.isAnonymous) {
-        navigate('/');
+        setIsLoginOpen(true);
+        setLoading(false);
       }
     });
 
@@ -83,6 +86,14 @@ const Admin = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const handleAdminLogin = async (email: string, password: string) => {
+    if (!auth) return;
+    await signOut(auth);
+    await signInWithEmailAndPassword(auth, email, password);
+    showNotification("Welcome back, Admin!");
+    setIsLoginOpen(false);
+  };
+
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this artwork?')) return;
     
@@ -123,18 +134,31 @@ const Admin = () => {
     }
   };
 
+  // Show login modal if not admin
   if (!isAdmin && !loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-4">Access Denied</h1>
-          <p className="text-muted-foreground mb-6">You need admin privileges to access this page.</p>
-          <button 
-            onClick={() => navigate('/')}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 rounded-lg"
-          >
-            Back to Home
-          </button>
+      <div className="min-h-screen bg-background">
+        <LoginModal 
+          isOpen={isLoginOpen} 
+          onClose={() => navigate('/')} 
+          onLogin={handleAdminLogin} 
+        />
+        
+        {notification && (
+          <Notification message={notification.message} type={notification.type} />
+        )}
+
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-foreground mb-4">Admin Access Required</h1>
+            <p className="text-muted-foreground mb-6">Please log in to access the admin dashboard.</p>
+            <button 
+              onClick={() => navigate('/')}
+              className="bg-muted hover:bg-muted/80 text-foreground px-6 py-2 rounded-lg"
+            >
+              Back to Home
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -150,6 +174,12 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <LoginModal 
+        isOpen={isLoginOpen} 
+        onClose={() => navigate('/')} 
+        onLogin={handleAdminLogin} 
+      />
+
       {notification && (
         <Notification message={notification.message} type={notification.type} />
       )}
