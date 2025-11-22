@@ -1,21 +1,23 @@
+
 import { useState, useEffect, useMemo } from 'react';
-import { 
-  Search, Upload, Filter, Image as ImageIcon, 
-  Loader2, Terminal
+import {
+  Filter, Image as ImageIcon,
+  Loader2, Upload
 } from 'lucide-react';
-import { 
-  collection, addDoc, serverTimestamp, 
+import {
+  collection, addDoc, serverTimestamp,
   query, orderBy, onSnapshot, doc, updateDoc, increment
 } from "firebase/firestore";
-import { 
-  signInAnonymously, onAuthStateChanged, signOut 
+import {
+  signInAnonymously, onAuthStateChanged, signOut
 } from "firebase/auth";
 import { db, auth, isConfigured } from '@/lib/firebase';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { Notification } from '@/components/Notification';
 import { UploadModal, UploadFormData } from '@/components/UploadModal';
 import { ArtworkCard } from '@/components/ArtworkCard';
-import { ArtworkDetailModal } from '@/components/ArtworkDetailModal';
+import { EmailGateModal } from '@/components/EmailGateModal';
+import { Navbar } from '@/components/Navbar';
 
 const MOCK_DATA = [
   {
@@ -41,16 +43,55 @@ const MOCK_DATA = [
 const Index = () => {
   const [artworks, setArtworks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [selectedArt, setSelectedArt] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedModel, setSelectedModel] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
+  const [isEmailGateOpen, setIsEmailGateOpen] = useState(false);
+  const [pendingPromptCopy, setPendingPromptCopy] = useState<string | null>(null);
+  const [hasSubmittedEmail, setHasSubmittedEmail] = useState(() => {
+    return sessionStorage.getItem('promptAccessGranted') === 'true';
+  });
 
   const isAdmin = !!(user && !user.isAnonymous);
+
+  // Anti-debugging protection
+  useEffect(() => {
+    const disableDevTools = (e: KeyboardEvent) => {
+      if (e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
+        (e.ctrlKey && e.key === 'U')) {
+        e.preventDefault();
+        return false;
+      }
+    };
+
+    const disableRightClick = (e: MouseEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    document.addEventListener('keydown', disableDevTools);
+    document.addEventListener('contextmenu', disableRightClick);
+
+    // Detect dev tools
+    const detectDevTools = setInterval(() => {
+      const threshold = 160;
+      if (window.outerWidth - window.innerWidth > threshold ||
+        window.outerHeight - window.innerHeight > threshold) {
+        document.body.innerHTML = '';
+      }
+    }, 1000);
+
+    return () => {
+      document.removeEventListener('keydown', disableDevTools);
+      document.removeEventListener('contextmenu', disableRightClick);
+      clearInterval(detectDevTools);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isConfigured) {
@@ -67,14 +108,14 @@ const Index = () => {
       } catch (error: any) {
         console.error("Auth error:", error);
         if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed') {
-          setNotification({ 
-            message: "SETUP REQUIRED: Enable 'Anonymous' Sign-in in Firebase Console", 
-            type: "error" 
+          setNotification({
+            message: "SETUP REQUIRED: Enable 'Anonymous' Sign-in in Firebase Console",
+            type: "error"
           });
         }
       }
     };
-    
+
     initAuth();
 
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -109,11 +150,19 @@ const Index = () => {
   const handleLogout = async () => {
     if (!auth) return;
     await signOut(auth);
-    await signInAnonymously(auth); 
+    await signInAnonymously(auth);
     showNotification("Logged out");
   };
 
   const handleCopy = (text: string) => {
+    // Check if email has been submitted in this session
+    if (!hasSubmittedEmail) {
+      setPendingPromptCopy(text);
+      setIsEmailGateOpen(true);
+      return;
+    }
+
+    // Proceed with copy
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(() => {
         showNotification("Prompt copied!");
@@ -132,6 +181,36 @@ const Index = () => {
         showNotification("Failed to copy", "error");
       }
       document.body.removeChild(textArea);
+    }
+  };
+
+  const handleEmailSubmit = async (email: string) => {
+    if (!isConfigured) {
+      showNotification("Firebase not configured", "error");
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, "prompt_access_emails"), {
+        email: email,
+        submittedAt: serverTimestamp(),
+        userAgent: navigator.userAgent
+      });
+
+      // Mark session as granted
+      sessionStorage.setItem('promptAccessGranted', 'true');
+      setHasSubmittedEmail(true);
+
+      // Copy the pending prompt
+      if (pendingPromptCopy) {
+        handleCopy(pendingPromptCopy);
+        setPendingPromptCopy(null);
+      }
+
+      showNotification("Email submitted successfully!");
+    } catch (error: any) {
+      console.error("Email submission error:", error);
+      throw new Error("Failed to submit email. Please try again.");
     }
   };
 
@@ -166,10 +245,13 @@ const Index = () => {
         model: data.model,
         likes: 0,
         createdAt: serverTimestamp(),
-        uploaderId: user ? user.uid : 'anon'
+        uploaderId: user ? user.uid : 'anon',
+        uploaderName: data.uploaderName,
+        uploaderEmail: data.uploaderEmail,
+        status: 'pending'
       });
 
-      showNotification("Artwork published!");
+      showNotification("Artwork submitted for approval!");
     } catch (error: any) {
       console.error(error);
       showNotification("Upload failed: " + error.message, "error");
@@ -180,10 +262,13 @@ const Index = () => {
   const filteredArtworks = useMemo(() => {
     let result = [...artworks];
 
+    // Filter for approved artworks (or legacy ones without status)
+    result = result.filter(item => !item.status || item.status === 'approved');
+
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
-      result = result.filter(item => 
-        item.prompt.toLowerCase().includes(lower) || 
+      result = result.filter(item =>
+        item.prompt.toLowerCase().includes(lower) ||
         item.description.toLowerCase().includes(lower) ||
         item.model.toLowerCase().includes(lower)
       );
@@ -215,10 +300,13 @@ const Index = () => {
         isConfigured={isConfigured}
       />
 
-      <ArtworkDetailModal
-        artwork={selectedArt}
-        onClose={() => setSelectedArt(null)}
-        onCopy={handleCopy}
+      <EmailGateModal
+        isOpen={isEmailGateOpen}
+        onClose={() => {
+          setIsEmailGateOpen(false);
+          setPendingPromptCopy(null);
+        }}
+        onSubmit={handleEmailSubmit}
       />
 
       {notification && (
@@ -226,49 +314,12 @@ const Index = () => {
       )}
 
       {/* NAVBAR */}
-      <nav className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2 text-primary">
-              <Terminal size={28} />
-              <span className="text-xl font-bold text-foreground tracking-tight">
-                Prompt<span className="text-primary">Gallery</span>
-              </span>
-            </div>
-
-            <div className="hidden md:flex items-center gap-6">
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search size={16} className="text-muted-foreground" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search prompts..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-card border border-border text-sm rounded-full pl-10 pr-4 py-2 w-64 focus:outline-none focus:ring-2 focus:ring-ring transition-all text-foreground"
-                />
-              </div>
-              {isAdmin && (
-                <>
-                  <button
-                    onClick={() => window.location.href = '/admin'}
-                    className="text-xs font-medium px-3 py-1 rounded-full bg-primary/20 border border-primary text-primary hover:bg-primary/30 transition-colors"
-                  >
-                    Admin Panel
-                  </button>
-                  <button 
-                    onClick={handleLogout}
-                    className="text-xs font-medium px-3 py-1 rounded-full border bg-primary/20 border-primary text-primary transition-colors"
-                  >
-                    Log Out
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        isAdmin={isAdmin}
+        handleLogout={handleLogout}
+      />
 
       {/* HERO */}
       <div className="relative bg-gradient-to-b from-card to-background border-b border-border">
@@ -280,19 +331,17 @@ const Index = () => {
             </span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-            A curated collection of AI-generated imagery and the exact prompts used to create them. 
+            A curated collection of AI-generated imagery and the exact prompts used to create them.
             Explore, learn, and create.
           </p>
-          
-          {isAdmin && (
-            <button 
-              onClick={() => setIsUploadOpen(true)}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 rounded-full font-medium transition-all shadow-lg"
-            >
-              <Upload size={18} />
-              Upload Artwork
-            </button>
-          )}
+
+          <button
+            onClick={() => setIsUploadOpen(true)}
+            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 rounded-full font-medium transition-all shadow-lg"
+          >
+            <Upload size={18} />
+            Upload Your Artwork
+          </button>
         </div>
       </div>
 
@@ -305,18 +354,17 @@ const Index = () => {
               <button
                 key={model}
                 onClick={() => setSelectedModel(model)}
-                className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
-                  selectedModel === model 
-                    ? 'bg-primary text-primary-foreground font-medium' 
-                    : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted'
-                }`}
+                className={`px - 4 py - 1.5 rounded - full text - sm whitespace - nowrap transition - colors ${selectedModel === model
+                  ? 'bg-primary text-primary-foreground font-medium'
+                  : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted'
+                  } `}
               >
                 {model}
               </button>
             ))}
           </div>
 
-          <select 
+          <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
             className="bg-card border-none text-foreground text-sm rounded-lg focus:ring-2 focus:ring-ring block w-full sm:w-auto p-2.5 cursor-pointer"
@@ -349,7 +397,7 @@ const Index = () => {
                 artwork={art}
                 onCopy={handleCopy}
                 onLike={handleLike}
-                onClick={() => setSelectedArt(art)}
+                onClick={() => { }}
               />
             ))}
           </div>
