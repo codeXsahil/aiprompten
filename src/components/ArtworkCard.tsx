@@ -1,4 +1,4 @@
-import { Calendar, Copy } from 'lucide-react';
+import { Calendar, Copy, Share2 } from 'lucide-react';
 
 interface ArtworkCardProps {
   artwork: {
@@ -12,11 +12,11 @@ interface ArtworkCardProps {
     uploaderName?: string;
   };
   onCopy: (text: string) => void;
-
+  onShare?: () => void;
   onClick: () => void;
 }
 
-export const ArtworkCard = ({ artwork, onCopy, onClick }: ArtworkCardProps) => {
+export const ArtworkCard = ({ artwork, onCopy, onShare, onClick }: ArtworkCardProps) => {
   return (
     <div className="group relative bg-card rounded-xl overflow-hidden border border-border hover:border-primary/50 transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 flex flex-col">
       <div
@@ -62,13 +62,30 @@ export const ArtworkCard = ({ artwork, onCopy, onClick }: ArtworkCardProps) => {
           <p className="text-muted-foreground text-xs line-clamp-3 font-mono mb-3 select-none">
             {artwork.prompt.split(' ').slice(0, 2).join(' ')}...
           </p>
-          <button
-            onClick={() => onCopy(artwork.prompt)}
-            className="w-full flex items-center justify-center gap-2 bg-secondary hover:bg-primary hover:text-primary-foreground text-secondary-foreground text-xs py-2 rounded-md transition-all font-medium"
-          >
-            <Copy size={14} />
-            Copy Prompt
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy(artwork.prompt);
+              }}
+              className="flex-1 flex items-center justify-center gap-2 bg-secondary hover:bg-primary hover:text-primary-foreground text-secondary-foreground text-xs py-2 rounded-md transition-all font-medium"
+            >
+              <Copy size={14} />
+              Copy Prompt
+            </button>
+            {onShare && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShare();
+                }}
+                className="flex items-center justify-center px-3 bg-secondary hover:bg-primary hover:text-primary-foreground text-secondary-foreground rounded-md transition-all"
+                title="Share Artwork"
+              >
+                <Share2 size={16} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

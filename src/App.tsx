@@ -12,6 +12,7 @@ import Terms from "./pages/Terms";
 const queryClient = new QueryClient();
 
 import { PublicLayout } from "@/layouts/PublicLayout";
+import SharedArtwork from "./pages/SharedArtwork";
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -22,6 +23,7 @@ const App = () => (
         <Routes>
           <Route element={<PublicLayout />}>
             <Route path="/" element={<Index />} />
+            <Route path="/artwork/:id" element={<SharedArtwork />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
           </Route>

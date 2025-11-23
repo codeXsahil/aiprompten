@@ -18,6 +18,7 @@ import { Notification } from '@/components/Notification';
 import { UploadModal, UploadFormData } from '@/components/UploadModal';
 import { ArtworkCard } from '@/components/ArtworkCard';
 import { EmailGateModal } from '@/components/EmailGateModal';
+import { ShareModal } from '@/components/ShareModal';
 
 
 const MOCK_DATA = [
@@ -52,6 +53,7 @@ const Index = () => {
   const [selectedModel, setSelectedModel] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
   const [isEmailGateOpen, setIsEmailGateOpen] = useState(false);
+  const [shareData, setShareData] = useState<{ url: string; title: string } | null>(null);
   const [pendingPromptCopy, setPendingPromptCopy] = useState<string | null>(null);
   const [hasSubmittedEmail, setHasSubmittedEmail] = useState(() => {
     return sessionStorage.getItem('promptAccessGranted') === 'true';
@@ -210,6 +212,14 @@ const Index = () => {
     }
   };
 
+  const handleShare = (artwork: any) => {
+    const url = `${window.location.origin}/#/artwork/${artwork.id}`;
+    setShareData({
+      url,
+      title: artwork.description || "AI Artwork"
+    });
+  };
+
 
 
   const handleUpload = async (data: UploadFormData) => {
@@ -295,6 +305,15 @@ const Index = () => {
         onSubmit={handleEmailSubmit}
       />
 
+      {shareData && (
+        <ShareModal
+          isOpen={!!shareData}
+          onClose={() => setShareData(null)}
+          url={shareData.url}
+          title={shareData.title}
+        />
+      )}
+
       {notification && (
         <Notification message={notification.message} type={notification.type} />
       )}
@@ -376,7 +395,7 @@ const Index = () => {
                 key={art.id}
                 artwork={art}
                 onCopy={handleCopy}
-
+                onShare={() => handleShare(art)}
                 onClick={() => { }}
               />
             ))}
