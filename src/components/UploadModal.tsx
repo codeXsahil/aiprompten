@@ -171,7 +171,7 @@ export const UploadModal = ({ isOpen, onClose, onUpload, isConfigured }: UploadM
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-3 rounded-lg font-medium transition-colors flex justify-center items-center gap-2"
         >
           {isUploading ? <Loader2 className="animate-spin" /> : <Cloud size={18} />}
-          {isUploading ? 'Uploading to Cloudinary...' : 'Publish Artwork'}
+          {isUploading ? 'Uploading...' : 'Publish Artwork'}
         </button>
       </form>
     </Modal>
